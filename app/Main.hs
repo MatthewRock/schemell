@@ -4,17 +4,19 @@ import Control.Monad
 import Numeric 
 import Data.Ratio
 import Data.Complex
+import Data.Array
 
 data LispVal = Atom String
-             | List [LispVal]
-             | DottedList [LispVal] LispVal
-             | Number Integer
-             | String String
-             | Bool Bool
-             | Character Char
-             | Float Float
-             | Ratio Rational
-             | Complex (Complex Double)
+            | List [LispVal]
+            | DottedList [LispVal] LispVal
+            | Number Integer
+            | String String
+            | Bool Bool
+            | Character Char
+            | Float Float
+            | Ratio Rational
+            | Complex (Complex Double)
+            | Vector (Array Int LispVal)
 
 
 main :: IO ()
@@ -40,6 +42,19 @@ parseExpr = try parseRational
         <|> try parseNumber
         <|> try parseBoolTrue
         <|> try parseCharacterLiteral
+        <|> try (do 
+                string "#("
+                x <- parseVector
+                char ')'
+                return x)
+        <|> try parseQuoted
+        <|> try parseQuasiQuoted
+        <|> try parseUnQuote
+        <|> do
+            char '('
+            x <- try parseList <|> parseDottedList
+            char ')'
+            return x
         <|> parseAtom
 
 parseFloat :: Parser LispVal
@@ -142,6 +157,38 @@ parseComplex = do
         y <- (try parseFloat <|> parseDecimal)
         char 'i' 
         return $ Complex (toDouble x :+ toDouble y)
+
+parseList :: Parser LispVal
+parseList = liftM List $ sepBy parseExpr spaces
+
+parseDottedList :: Parser LispVal
+parseDottedList = do
+    head <- endBy parseExpr spaces
+    tail <- char '.' >> spaces >> parseExpr
+    return $ DottedList head tail
+
+parseQuoted :: Parser LispVal
+parseQuoted = do
+    char '\''
+    x <- parseExpr
+    return $ List [Atom "quote", x]
+
+parseQuasiQuoted :: Parser LispVal
+parseQuasiQuoted = do
+     char '`'
+     x <- parseExpr
+     return $ List [Atom "quasiquote", x]
+     
+parseUnQuote :: Parser LispVal
+parseUnQuote = do
+     char ','
+     x <- parseExpr
+     return $ List [Atom "unquote", x]
+
+parseVector :: Parser LispVal
+parseVector = do 
+    arrayValues <- sepBy parseExpr spaces
+    return $ Vector (listArray (0,(length arrayValues - 1)) arrayValues)
 
 parseCharacterLiteral :: Parser LispVal
 parseCharacterLiteral = do
