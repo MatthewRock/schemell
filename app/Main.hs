@@ -227,4 +227,66 @@ eval val@(String _) = val  -- _ = don't care, match everything
 eval val@(Number _) = val
 eval val@(Bool _) = val
 eval (List [Atom "quote", val]) = val
+eval (List (Atom func : args)) = 
+    apply func $ map eval args  -- function evaluation -- function and list of arguments
+
+primitives :: [(String, [LispVal] -> LispVal)]
+primitives = [("+", numericBinop (+)),
+              ("-", numericBinop (-)),
+              ("*", numericBinop (*)),
+              ("/", numericBinop div),
+              ("mod", numericBinop mod),
+              ("quotient", numericBinop quot),
+              ("remainder", numericBinop rem),
+              ("boolean?", unaryOp isBoolean),
+              ("symbol?" , unaryOp isSymbol) ,
+              ("string?" , unaryOp isString) ,
+              ("number?" , unaryOp isNumber) ,
+              ("list?" , unaryOp isList),
+              ("symbol->string", unaryOp symbol2string),
+              ("string->symbol", unaryOp string2symbol)]
+
+unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
+unaryOp f [v] = f v
+
+numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
+numericBinop op params = Number $ foldl1 op $ map unpackNum params
+
+isSymbol :: LispVal -> LispVal
+isSymbol (Atom _)   = Bool True
+isSymbol _          = Bool False
+isNumber :: LispVal -> LispVal
+isNumber (Number _) = Bool True
+isNumber _          = Bool False
+isString :: LispVal -> LispVal
+isString (String _) = Bool True
+isString _          = Bool False
+isBoolean :: LispVal -> LispVal
+isBoolean   (Bool _)   = Bool True
+isBoolean   _          = Bool False
+isList :: LispVal -> LispVal
+isList   (List _)   = Bool True
+isList   (DottedList _ _) = Bool True
+isList   _          = Bool False
+-- isBoolean :: [LispVal] -> LispVal
+-- isBoolean = "#t"
+
+symbol2string, string2symbol :: LispVal -> LispVal
+symbol2string (Atom s)   = String s
+symbol2string _          = String ""
+string2symbol (String s) = Atom s
+string2symbol _          = Atom ""
+
+unpackNum :: LispVal -> Integer
+unpackNum (Number n) = n
+-- the following lines commented out because of chapter 3 ex 2
+--unpackNum (String n) = let parsed = reads n :: [(Integer, String)] in 
+--                           if null parsed 
+--                              then 0
+--                              else fst $ parsed !! 0
+--unpackNum (List [n]) = unpackNum n
+unpackNum _ = 0
+
+apply :: String -> [LispVal] -> LispVal
+apply func args = maybe (Bool False) ($ args) $ lookup func primitives  -- maybe returns false if lookup fails
 
