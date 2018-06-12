@@ -20,9 +20,7 @@ data LispVal = Atom String
 
 
 main :: IO ()
-main = do 
-    (expr:_) <- getArgs
-    putStrLn (readExpr expr)
+main = getArgs >>= print . eval . readExpr . head  -- 1. take first value 2. read 3. evalueate 4. print
 
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
@@ -30,10 +28,10 @@ symbol = oneOf "!$%&|*+-/:<=>?@^_~"
 spaces :: Parser ()
 spaces = skipMany1 space
 
-readExpr :: String -> String
+readExpr :: String -> LispVal
 readExpr input = case parse parseExpr "lisp" input of
-    Left err -> "No match: " ++ show err
-    Right _ -> "Found value"
+    Left err -> String $ "No match: " ++ show err
+    Right value ->  value
 
 parseExpr :: Parser LispVal
 parseExpr = try parseRational
@@ -210,4 +208,23 @@ bin2dig' digint "" = digint
 bin2dig' digint (x:xs) = let old = 2 * digint + (if x == '0' then 0 else 1) in
                          bin2dig' old xs
 
+showVal :: LispVal -> String
+showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Atom name) = name
+showVal (Number contents) = show contents
+showVal (Bool True) = "#t"
+showVal (Bool False) = "#f"
+showVal (List contents) = "(" ++ unwordsList contents ++ ")"
+showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
+
+unwordsList :: [LispVal] -> String
+unwordsList = unwords . map showVal  -- map showVal applies  showVal to every element of list, returns a list of strings. unwords joinst elements of list with spaces
+
+instance Show LispVal where show = showVal  -- so that we can use showVal like a standard show method
+
+eval :: LispVal -> LispVal
+eval val@(String _) = val  -- _ = don't care, match everything
+eval val@(Number _) = val
+eval val@(Bool _) = val
+eval (List [Atom "quote", val]) = val
 
