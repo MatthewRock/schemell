@@ -8,7 +8,6 @@ copyright:           "MIT"
 
 extra-source-files:
 - README.md
-- ChangeLog.md
 
 # Metadata used when publishing your package
 # synopsis:            Short description of your package
@@ -22,6 +21,8 @@ description:         Please see the README on Github at <https://github.com/Matt
 dependencies:
 - base >= 4.7 && < 5
 - parsec
+- mtl
+- array
 
 library:
   source-dirs: src

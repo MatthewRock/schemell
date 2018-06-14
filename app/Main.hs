@@ -1,7 +1,7 @@
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
 import Control.Monad
-import Numeric 
+import Numeric
 import Data.Ratio
 import Data.Complex
 import Data.Array
@@ -41,7 +41,7 @@ parseExpr = try parseRational
         <|> try parseNumber
         <|> try parseBoolTrue
         <|> try parseCharacterLiteral
-        <|> try (do 
+        <|> try (do
                 string "#("
                 x <- parseVector
                 char ')'
@@ -57,7 +57,7 @@ parseExpr = try parseRational
         <|> parseAtom
 
 parseFloat :: Parser LispVal
-parseFloat = do 
+parseFloat = do
     x <- many1 digit
     char '.'
     y <- many1 digit
@@ -80,7 +80,7 @@ innerQuote = do
     return answer
 
 parseRational :: Parser LispVal
-parseRational = do 
+parseRational = do
     x <- many1 digit
     char '/'
     y <- many1 digit
@@ -95,11 +95,11 @@ parseString = do
     return $ String x
 
 parseAtom :: Parser LispVal
-parseAtom = do 
+parseAtom = do
               first <- letter <|> symbol
               rest <- many (letter <|> digit <|> symbol)
               let atom = first:rest
-              return $ case atom of 
+              return $ case atom of
                          "#t" -> Bool True
                          "#f" -> Bool False
                          _    -> Atom atom
@@ -150,11 +150,11 @@ parseDecimal :: Parser LispVal
 parseDecimal = parseDecimal1 <|> parseDecimal2
 
 parseComplex :: Parser LispVal
-parseComplex = do 
+parseComplex = do
         x <- (try parseFloat <|> parseDecimal)
-        char '+' 
+        char '+'
         y <- (try parseFloat <|> parseDecimal)
-        char 'i' 
+        char 'i'
         return $ Complex (toDouble x :+ toDouble y)
 
 parseList :: Parser LispVal
@@ -177,7 +177,7 @@ parseQuasiQuoted = do
      char '`'
      x <- parseExpr
      return $ List [Atom "quasiquote", x]
-     
+
 parseUnQuote :: Parser LispVal
 parseUnQuote = do
      char ','
@@ -185,7 +185,7 @@ parseUnQuote = do
      return $ List [Atom "unquote", x]
 
 parseVector :: Parser LispVal
-parseVector = do 
+parseVector = do
     arrayValues <- sepBy parseExpr spaces
     return $ Vector (listArray (0,(length arrayValues - 1)) arrayValues)
 
@@ -193,14 +193,14 @@ parseCharacterLiteral :: Parser LispVal
 parseCharacterLiteral = do
     char '#'
     char '\\'
-    value <- try (string "newline" <|> string "space") 
+    value <- try (string "newline" <|> string "space")
         <|> do { x <- anyChar; notFollowedBy alphaNum ; return [x] }
     return $ Character $ case value of
         "space" -> ' '
         "newline" -> '\n'
         otherwise -> (value !! 0)
 
-    
+
 oct2dig x = fst $ readOct x !! 0
 hex2dig x = fst $ readHex x !! 0
 float2dig x = fst $ readFloat x !! 0
@@ -228,7 +228,7 @@ eval val@(String _) = val  -- _ = don't care, match everything
 eval val@(Number _) = val
 eval val@(Bool _) = val
 eval (List [Atom "quote", val]) = val
-eval (List (Atom func : args)) = 
+eval (List (Atom func : args)) =
     apply func $ map eval args  -- function evaluation -- function and list of arguments
 
 primitives :: [(String, [LispVal] -> LispVal)]
@@ -281,8 +281,8 @@ string2symbol _          = Atom ""
 unpackNum :: LispVal -> Integer
 unpackNum (Number n) = n
 -- the following lines commented out because of chapter 3 ex 2
---unpackNum (String n) = let parsed = reads n :: [(Integer, String)] in 
---                           if null parsed 
+--unpackNum (String n) = let parsed = reads n :: [(Integer, String)] in
+--                           if null parsed
 --                              then 0
 --                              else fst $ parsed !! 0
 --unpackNum (List [n]) = unpackNum n
@@ -304,7 +304,7 @@ showError :: LispError -> String
 showError (UnboundVar message varname)  = message ++ ": " ++ varname
 showError (BadSpecialForm message form) = message ++ ": " ++ show form
 showError (NotFunction message func)    = message ++ ": " ++ show func
-showError (NumArgs expected found)      = "Expected " ++ show expected 
+showError (NumArgs expected found)      = "Expected " ++ show expected
                                        ++ " args; found values " ++ unwordsList found
 showError (TypeMismatch expected found) = "Invalid type: expected " ++ expected
                                        ++ ", found " ++ show found
@@ -313,4 +313,3 @@ showError (Parser parseErr)             = "Parse error at " ++ show parseErr
 instance Show LispError where show = showError
 
 type ThrowsError = Either LispError
-
