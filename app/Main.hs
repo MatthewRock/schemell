@@ -23,8 +23,9 @@ data LispVal = Atom String
             | Ratio Rational
             | Complex (Complex Double)
             | Vector (Array Int LispVal)
-
-
+            | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
+            | Func { params :: [String], vararg :: (Maybe String),
+                     body :: [LispVal], closure :: Env }
 -- REPL helpers
 flushStr :: String -> IO ()
 flushStr str = putStr str >> hFlush stdout
@@ -45,11 +46,19 @@ until_ pred prompt action = do
       then return ()
       else action result >> until_ pred prompt action
 
+primitiveBindings :: IO Env
+primitiveBindings = nullEnv >>= (flip bindVars $ map makePrimitiveFunc primitives)
+     where makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
+
 runOne :: String -> IO ()
-runOne expr = nullEnv >>= flip evalAndPrint expr
+runOne expr = primitiveBindings >>= flip evalAndPrint expr
 
 runRepl :: IO ()
-runRepl = nullEnv >>= until_ (== "quit") (readPrompt "Lisp>>> ") . evalAndPrint
+runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "Lisp>>> ") . evalAndPrint
+
+makeFunc varargs env params body = return $ Func (map showVal params) varargs body env
+makeNormalFunc = makeFunc Nothing
+makeVarArgs = makeFunc . Just . showVal
 
 -- Interpreter code
 
@@ -256,6 +265,14 @@ showVal (Bool True) = "#t"
 showVal (Bool False) = "#f"
 showVal (List contents) = "(" ++ unwordsList contents ++ ")"
 showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
+showVal (PrimitiveFunc _) = "<primitive>"
+showVal (Func {params = args, vararg = varargs, body = body, closure = env}) =
+   "(lambda (" ++ unwords (map show args) ++
+      (case varargs of
+         Nothing -> ""
+         Just arg -> " . " ++ arg) ++ ") ...)"
+
+
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal  -- map showVal applies  showVal to every element of list, returns a list of strings. unwords joinst elements of list with spaces
@@ -284,8 +301,21 @@ eval env (List [Atom "set!", Atom var, form]) =
      eval env form >>= setVar env var
 eval env (List [Atom "define", Atom var, form]) =
      eval env form >>= defineVar env var
+eval env (List (Atom "define" : List (Atom var : params) : body)) =
+     makeNormalFunc env params body >>= defineVar env var
+eval env (List (Atom "define" : DottedList (Atom var : params) varargs : body)) =
+     makeVarArgs varargs env params body >>= defineVar env var
+eval env (List (Atom "lambda" : List params : body)) =
+     makeNormalFunc env params body
+eval env (List (Atom "lambda" : DottedList params varargs : body)) =
+     makeVarArgs varargs env params body
+eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
+     makeVarArgs varargs env [] body
 
-eval env (List (Atom func : args)) = mapM (eval env) args >>= liftThrows . apply func
+eval env (List (function : args)) = do
+     func <- eval env function
+     argVals <- mapM (eval env) args
+     apply func argVals
 eval env badForm = throwError $ BadSpecialForm "Unrecognized special form" badForm
 
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
@@ -442,10 +472,19 @@ equal [arg1, arg2] = do
 equal badArgList = throwError $ NumArgs 2 badArgList
 
 
-apply :: String -> [LispVal] -> ThrowsError LispVal
-apply func args = maybe (throwError $ NotFunction "Unrecognized primitive function args" func)
-                  ($ args)
-                  (lookup func primitives)
+apply :: LispVal -> [LispVal] -> IOThrowsError LispVal
+apply (PrimitiveFunc func) args = liftThrows $ func args
+apply (Func params varargs body closure) args =
+      if num params /= num args && varargs == Nothing
+         then throwError $ NumArgs (num params) args
+         else (liftIO $ bindVars closure $ zip params args) >>= bindVarArgs varargs >>= evalBody
+      where remainingArgs = drop (length params) args
+            num = toInteger . length
+            evalBody env = liftM last $ mapM (eval env) body
+            bindVarArgs arg env = case arg of
+                Just argName -> liftIO $ bindVars env [(argName, List $ remainingArgs)]
+                Nothing -> return env
+
 
 -- ERROR HANDLING
 data LispError = NumArgs Integer [LispVal]
